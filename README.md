@@ -16,4 +16,11 @@ This program was made using Python, using the NumPy, Pandas, and Matplotlib pack
 The repository includes:
 
 - NADLabTools.py - The Python source code.
-- NADLabTools.exe - A PyInstaller executable of the program.
+
+Use PyInstaller to generate an executable of the program. First install PyInstaller using the command line:
+
+`pip install pyinstaller`
+
+Then generate the executable:
+
+`pyinstaller --onefile NADLabTools.py`
