@@ -11,7 +11,7 @@ Archie Shahidullah 2019
 
 ---
 
-This program was made using Python, using the NumPy, Pandas, and Matplotlib packages.
+This program was made using Python, using the NumPy, pandas, and Matplotlib packages.
 
 The repository includes:
 
