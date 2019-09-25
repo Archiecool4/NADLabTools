@@ -1,4 +1,4 @@
-'''
+"""
 NAD Lab Tools
 
 This program was written for the NAD Lab at the University of Arizona by Archie Shahidullah.
@@ -10,7 +10,7 @@ calcium concentration or pH. Over a period of time, solutions are added to deter
 of the quantities.
 
 Archie Shahidullah 2019
-'''
+"""
 
 import sys
 import os
@@ -41,12 +41,19 @@ measure = 'Calcium'
 
 
 def process_data(df):
-    '''
+    """
     Takes in a pandas dataframe and calculates the mean Calcium/pH as well as ratios
     between different wavelength measurements. Then formats the data into a CSV file.
     Lastly, uses the user-defined thresholds to exclude outlier cells.
-    '''
-    global measure
+    
+    Arguments:
+        df {pd.DataFrame} -- a dataframe to process
+    
+    Returns:
+        tuple -- a tuple of dataframes containing the processed dataframes, their outliers, and
+                 graph data   
+    """
+    global itime, ftime, lbase, ubase, measure
 
     # Adjusts parameters based on Calcium/pH mode
     meas = ''
@@ -115,8 +122,7 @@ def process_data(df):
     # Outlier means
     mean_ratio_outliers = ratio_outliers.mean(
         axis=1).to_frame(name='Mean Ratio')
-    mean_ca_outliers = calc_outliers.mean(
-        axis=1).to_frame(name=meanname)
+    mean_ca_outliers = calc_outliers.mean(axis=1).to_frame(name=meanname)
 
     # Format CSV for outliers
     processed_outliers = pd.concat([times, empty, calc_outliers, empty, conc_340_outliers, empty,
@@ -128,10 +134,17 @@ def process_data(df):
 
 
 def save_figure(df, filename, output, events, eventtimes):
-    '''
+    """
     Takes in a pandas dataframe and saves the graph of the data. Also
     labels events on the graph the user defines.
-    '''
+    
+    Arguments:
+        df {pd.DataFrame} -- a dataframe to generate a graph from
+        filename {str} -- the name to save the graph as
+        output {str} -- a path to the desired output folder
+        events {list} -- a list of events to mark on the diagram
+        eventtimes {list} -- a list of the times when the events happened
+    """
     global measure
 
     # Calcium/pH mode
@@ -164,10 +177,16 @@ def save_figure(df, filename, output, events, eventtimes):
 
 
 def spike_detection(df):
-    '''
-    Implements a simple bandpass filter to remove spikes from the data. Also uses
+    """
+    Implements a simple "bandpass" filter to remove spikes from the data. Also uses
     local median filtering to establish where spikes happen.
-    '''
+    
+    Arguments:
+        df {pd.DataFrame} -- a dataframe to despike
+    
+    Returns:
+        pd.DataFrame -- the despiked dataframe
+    """
     global measure
 
     # Calcium/pH mode
@@ -187,11 +206,11 @@ def spike_detection(df):
     means = np.array(df[meanname])
     # Calculate differences in array, e.g. [1, 5, 3] would return [4, -2]
     diffs = np.abs(np.diff(means))
-    # Apply bandpass filter and flatten array
+    # Apply "bandpass" filter and flatten array
     remove = np.array(np.where((diffs > minimum) &
                                (diffs < maximum))).flatten()
 
-    # Anonymous function to return whether a number is within epsilon of a specified value
+    # Function to return whether a number is within epsilon of a specified value
     def within(e, a, r): return (a > e - r) & (a < e + r)
     # Apply radius around point to remove from data as well as median filtering
     remove = np.array([np.arange(i, i + radius) for i in remove if
@@ -207,10 +226,15 @@ def spike_detection(df):
 
 
 def process_file(name, output, events):
-    '''
+    """
     Reads a raw data file and puts the data into a pandas dataframe.
     Then processes the data and saves the files.
-    '''
+    
+    Arguments:
+        name {str} -- a path to the data file
+        output {str} -- a path to the desired output folder
+        events {list} -- a list of events to mark on the diagram
+    """
     global measure
 
     # Read data file (specific to InCytim2 software)
@@ -257,10 +281,14 @@ def process_file(name, output, events):
 
 
 def generate_average(names, output):
-    '''
+    """
     Reads previously processed CSV files and averages them together.
     Also outputs a despiked version of the data.
-    '''
+    
+    Arguments:
+        names {list} -- a list of paths to the CSV files
+        output {str} -- a path to the desired output folder
+    """
     global measure
 
     # Calcium/pH mode
@@ -272,20 +300,43 @@ def generate_average(names, output):
 
     # Drop empty columns and determine shortest experiment
     means = pd.DataFrame()
+    ratios = pd.DataFrame()
     mintime = sys.maxsize
     for name in names:
         df = pd.read_csv(name)
         df = df.dropna(axis='columns', how='all')
-        means[os.path.basename(name)[:-4]] = df[meanname]
+        # Inserts data
+        means[os.path.basename(name)[:-4] + meanname[4:]] = df[meanname]
+        ratios[os.path.basename(name)[:-4] + ' Ratio'] = df['Mean Ratio']
+        # Updates shortest time
         time = df['Time (s)'].iloc[-1]
         if time < mintime:
             mintime = time
 
-    # Creates a common time axis and averages data
+    # Remove excess data and concatenate
     means = means.dropna()
-    averages = means.copy()
+    ratios = ratios.dropna()
+    averages = pd.concat([means, ratios], axis=1)
+
+    # Alternates entries from means and ratios
+    cols = [None] * (len(means.columns) + len(ratios.columns))
+    cols[::2] = means.columns.tolist()
+    cols[1::2] = ratios.columns.tolist()
+    averages = averages[cols]
+
+    # Creates a common time axis
     timestamps = np.arange(0, mintime, 6)
     averages.insert(0, 'Time (s)', timestamps)
+
+    # Insert empty columns
+    l = len(averages.columns)
+    c = 0
+    for i in range(1, l + 1, 2):
+        averages.insert(i + c, '', np.nan, allow_duplicates=True)
+        c += 1
+
+    # Averages data
+    averages['Mean Ratio'] = ratios.mean(axis=1)
     averages[meanname] = means.mean(axis=1)
 
     # Spike detection
@@ -306,31 +357,52 @@ def generate_average(names, output):
 
 
 def about():
-    '''About message box in file menu'''
+    """About message box in file menu"""
     tk.messagebox.showinfo(
         'Information', 'This program has various data analysis tools for the NAD Lab.\n'
         + 'Made by Archie Shahidullah for the University of Arizona.\n© 2019.')
 
 
 def selectfiles(entrybox):
-    '''Displays and updates selected files'''
+    """
+    Displays and updates selected files
+    
+    Arguments:
+        entrybox {tk.Entry} -- a TKinter entrybox
+    """
     global names
+
+    # Prompt user to select files
     names = askopenfilenames()
     entrybox.delete(0, 'end')
+    # Display list without brackets on GUI
     entrybox.insert(0, str([os.path.basename(name)
                             for name in names]).strip('[]'))
 
 
 def selectoutput(entrybox):
-    '''Displays and updates output directory'''
+    """
+    Displays and updates output directory
+    
+    Arguments:
+        entrybox {tk.Entry} -- a Tkinter entrybox
+    """
     global output
+
+    # Prompt user to select directory
     output = askdirectory()
     entrybox.delete(0, 'end')
     entrybox.insert(0, output)
 
 
 def update_times(entrybox1, entrybox2):
-    '''Updates baseline times'''
+    """
+    Updates baseline times
+    
+    Arguments:
+        entrybox1 {tk.Entry} -- Tkinter entrybox with initial time
+        entrybox2 {tk.Entry} -- Tkinter entrybox with final time
+    """
     global itime, ftime
 
     itime = int(entrybox1.get())
@@ -338,7 +410,13 @@ def update_times(entrybox1, entrybox2):
 
 
 def update_base(entrybox1, entrybox2):
-    '''Updates thresholds for bandpass filter'''
+    """
+    Updates thresholds for "bandpass" filter
+    
+    Arguments:
+        entrybox1 {tk.Entry} -- Tkinter entrybox with lower threshold
+        entrybox2 {tk.Entry} -- Tkinter entrybox with upper threshold
+    """
     global lbase, ubase
 
     lbase = float(entrybox1.get())
@@ -346,41 +424,71 @@ def update_base(entrybox1, entrybox2):
 
 
 def update_events(entrybox):
-    '''Updates user-defined drug names'''
+    """
+    Updates user-defined drug names
+    
+    Arguments:
+        entrybox {tk.Entry} -- a Tkinter entrybox
+    """
     global events
 
+    # Extract event names from entrybox
     events = entrybox.get().replace(' ', '').split(',')
 
 
 def process(execute):
-    '''Processes selected files'''
+    """
+    Processes selected files
+    
+    Arguments:
+        execute {bool} -- a bool that determines whether all conditions 
+                          for processing have been met
+    """
     global names, output, measure
 
+    # Check if conditions have been met
     if not execute:
         tk.messagebox.showinfo('Error!', 'Please Complete All Steps.')
         return
 
+    # Process data and display confirmation
     for name in names:
         process_file(name, output, events)
     tk.messagebox.showinfo('Completed', 'Task Successful!')
 
 
 def average(execute):
-    '''Averages selected files'''
+    """
+    Averages selected files
+    
+    Arguments:
+        execute {bool} -- a bool that determines whether all conditions 
+                          for processing have been met
+    """
     global names, output
 
+    # Check if conditions have been met
     if not execute:
         tk.messagebox.showinfo('Error!', 'Please Complete All Steps.')
         return
 
+    # Average data and display confirmation
     generate_average(names, output)
     tk.messagebox.showinfo('Completed', 'Task Successful!')
 
 
 def set_meas(e1, e2, s):
-    '''Updates Calcium/pH mode'''
+    """
+    Updates Calcium/pH mode
+    
+    Arguments:
+        e1 {tk.Entry} -- Tkinter entrybox with lower threshold
+        e2 {tk.Entry} -- Tkinter entrybox with upper threshold
+        s {str} -- Calcium/pH mode
+    """
     global lbase, ubase, measure
 
+    # Set default thresholds based on mode
     if not e1 is None:
         if s == 'Calcium':
             lbase = 50
@@ -389,11 +497,13 @@ def set_meas(e1, e2, s):
             lbase = 6.7
             ubase = 7.3
 
+        # Update thresholds on GUI
         e1.delete(0, 'end')
         e1.insert(0, str(lbase))
         e2.delete(0, 'end')
         e2.insert(0, str(ubase))
 
+    # Update mode globally
     measure = s
 
 
